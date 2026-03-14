@@ -1,0 +1,15 @@
+# Binary
+/claude-term
+/cmd/claude-term/claude-term
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# Test
+*.test
+cover.out

@@ -6,15 +6,18 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/EliasSchlie/claude-term/internal/client"
 	"github.com/EliasSchlie/claude-term/internal/daemon"
 	"github.com/EliasSchlie/claude-term/internal/owner"
 	"github.com/EliasSchlie/claude-term/internal/paths"
+	"github.com/EliasSchlie/claude-term/internal/protocol"
 	"golang.org/x/term"
 )
 
@@ -46,6 +49,8 @@ func main() {
 		err = cmdSetOwner()
 	case "kill":
 		err = cmdKill()
+	case "subscribe":
+		err = cmdSubscribe()
 	case "ping":
 		err = cmdPing()
 	case "install":
@@ -77,6 +82,7 @@ Commands:
   resize <id> <c> <r> Resize terminal
   set-owner <id> <o> Change terminal owner
   kill <id>          Kill terminal
+  subscribe          Stream lifecycle events (JSON lines)
   ping               Health check
   install            Install hooks and skill into Claude Code
   uninstall          Remove hooks and skill from Claude Code`)
@@ -312,6 +318,13 @@ func cmdAttach() error {
 		defer term.Restore(int(os.Stdin.Fd()), oldState)
 	}
 
+	// Detect connection loss
+	go func() {
+		<-c.Done()
+		fmt.Fprintf(os.Stderr, "\n[connection to daemon lost]\n")
+		finish()
+	}()
+
 	// Forward stdin to terminal
 	go func() {
 		buf := make([]byte, 1024)
@@ -373,6 +386,45 @@ func cmdKill() error {
 	}
 	defer c.Close()
 	return c.Kill(os.Args[2])
+}
+
+func cmdSubscribe() error {
+	c, err := connect()
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+
+	writeEvent := func(msg *protocol.Message) {
+		data, err := protocol.Encode(msg)
+		if err != nil {
+			return
+		}
+		data = append(data, '\n')
+		os.Stdout.Write(data)
+	}
+
+	c.SetPushHandler(client.PushHandler{
+		OnTermSpawned:      writeEvent,
+		OnTermKilled:       writeEvent,
+		OnTermExited:       writeEvent,
+		OnTermOwnerChanged: writeEvent,
+	})
+
+	if err := c.Subscribe(); err != nil {
+		return err
+	}
+
+	// Block until connection closes or signal
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
+	select {
+	case <-sigs:
+		c.Unsubscribe()
+	case <-c.Done():
+		return fmt.Errorf("connection to daemon lost")
+	}
+	return nil
 }
 
 func cmdPing() error {

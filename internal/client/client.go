@@ -17,6 +17,12 @@ type PushHandler struct {
 	OnData   func(termID string, data []byte)
 	OnReplay func(termID string, data []byte)
 	OnExit   func(termID string, exitCode int)
+
+	// Lifecycle events (requires Subscribe)
+	OnTermSpawned      func(msg *protocol.Message)
+	OnTermKilled       func(msg *protocol.Message)
+	OnTermExited       func(msg *protocol.Message)
+	OnTermOwnerChanged func(msg *protocol.Message)
 }
 
 // Client connects to the claude-term daemon.
@@ -31,6 +37,7 @@ type Client struct {
 	push     PushHandler
 	closed   bool
 	closedMu sync.RWMutex
+	done     chan struct{} // closed when readLoop exits (connection lost)
 }
 
 // Connect creates a new client connected to the daemon.
@@ -48,6 +55,7 @@ func Connect(socketPath string) (*Client, error) {
 		scanner:    bufio.NewScanner(conn),
 		socketPath: socketPath,
 		pending:    make(map[string]chan *protocol.Message),
+		done:       make(chan struct{}),
 	}
 	c.scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
 
@@ -65,6 +73,12 @@ func (c *Client) SetPushHandler(h PushHandler) {
 // SocketPath returns the socket path this client is connected to.
 func (c *Client) SocketPath() string {
 	return c.socketPath
+}
+
+// Done returns a channel that is closed when the connection is lost.
+// Useful for detecting daemon shutdown in push-only clients (e.g., subscribers).
+func (c *Client) Done() <-chan struct{} {
+	return c.done
 }
 
 // Close disconnects from the daemon.
@@ -112,6 +126,7 @@ func (c *Client) readLoop() {
 	}
 	c.pending = make(map[string]chan *protocol.Message)
 	c.mu.Unlock()
+	close(c.done)
 }
 
 func (c *Client) handlePush(msg *protocol.Message) {
@@ -137,6 +152,22 @@ func (c *Client) handlePush(msg *protocol.Message) {
 				code = *msg.ExitCode
 			}
 			push.OnExit(msg.TermID, code)
+		}
+	case protocol.TypeTermSpawned:
+		if push.OnTermSpawned != nil {
+			push.OnTermSpawned(msg)
+		}
+	case protocol.TypeTermKilled:
+		if push.OnTermKilled != nil {
+			push.OnTermKilled(msg)
+		}
+	case protocol.TypeTermExited:
+		if push.OnTermExited != nil {
+			push.OnTermExited(msg)
+		}
+	case protocol.TypeTermOwnerChanged:
+		if push.OnTermOwnerChanged != nil {
+			push.OnTermOwnerChanged(msg)
 		}
 	}
 }
@@ -318,6 +349,23 @@ func (c *Client) List(owner string) ([]protocol.TerminalInfo, error) {
 		return []protocol.TerminalInfo{}, nil
 	}
 	return resp.Terminals, nil
+}
+
+// Subscribe registers for terminal lifecycle events.
+func (c *Client) Subscribe() error {
+	id := c.nextID()
+	_, err := c.send(&protocol.Message{
+		Type: protocol.TypeSubscribe,
+		ID:   id,
+	})
+	return err
+}
+
+// Unsubscribe stops receiving lifecycle events (fire-and-forget).
+func (c *Client) Unsubscribe() error {
+	return c.sendFireAndForget(&protocol.Message{
+		Type: protocol.TypeUnsubscribe,
+	})
 }
 
 // Ping checks daemon health.

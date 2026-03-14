@@ -11,6 +11,7 @@ claude-term read <id>                    Read buffered output
 claude-term attach <id>                  Interactive bidirectional attach (Ctrl+] to detach)
 claude-term resize <id> <cols> <rows>    Resize terminal
 claude-term kill <id>                    Kill terminal
+claude-term subscribe                    Stream lifecycle events as JSON lines (Ctrl+C to stop)
 claude-term ping                         Health check
 ```
 

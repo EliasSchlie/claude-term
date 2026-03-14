@@ -190,6 +190,13 @@ func (t *Terminal) Kill() error {
 	return t.ptmx.Close()
 }
 
+// SetOwner changes the terminal's owner.
+func (t *Terminal) SetOwner(owner string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.Owner = owner
+}
+
 // GetLastActivity returns the time of last activity.
 func (t *Terminal) GetLastActivity() time.Time {
 	t.mu.Lock()

@@ -141,6 +141,39 @@ func TestKillNonexistent(t *testing.T) {
 	}
 }
 
+func TestSetOwner(t *testing.T) {
+	c := startTestDaemon(t)
+
+	result, _ := c.Spawn(client.SpawnOpts{
+		Cmd:   "/bin/sh",
+		Args:  []string{"-c", "sleep 10"},
+		Owner: "original",
+	})
+
+	// Verify original owner
+	terms, _ := c.List("original")
+	if len(terms) != 1 {
+		t.Fatalf("expected 1 terminal for original, got %d", len(terms))
+	}
+
+	// Change owner
+	if err := c.SetOwner(result.TermID, "new-owner"); err != nil {
+		t.Fatalf("set-owner: %v", err)
+	}
+
+	// Should no longer appear under original
+	terms, _ = c.List("original")
+	if len(terms) != 0 {
+		t.Errorf("expected 0 terminals for original after set-owner, got %d", len(terms))
+	}
+
+	// Should appear under new owner
+	terms, _ = c.List("new-owner")
+	if len(terms) != 1 {
+		t.Errorf("expected 1 terminal for new-owner, got %d", len(terms))
+	}
+}
+
 func TestResize(t *testing.T) {
 	c := startTestDaemon(t)
 

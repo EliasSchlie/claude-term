@@ -21,6 +21,7 @@ Persistent terminal management. Daemon owns PTY processes, exposes them via Unix
 | `detach`  | Unsubscribe from live output |
 | `list`    | List terminals, optionally filtered by owner |
 | `resize`  | Change terminal dimensions |
+| `set-owner`| Change the owner of an existing terminal |
 | `kill`    | Terminate a terminal and remove it |
 | `ping`    | Health check |
 

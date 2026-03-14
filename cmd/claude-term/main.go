@@ -42,6 +42,8 @@ func main() {
 		err = cmdAttach()
 	case "resize":
 		err = cmdResize()
+	case "set-owner":
+		err = cmdSetOwner()
 	case "kill":
 		err = cmdKill()
 	case "ping":
@@ -73,6 +75,7 @@ Commands:
   read <id>          Read terminal buffer
   attach <id>        Attach to terminal (interactive)
   resize <id> <c> <r> Resize terminal
+  set-owner <id> <o> Change terminal owner
   kill <id>          Kill terminal
   ping               Health check
   install            Install hooks and skill into Claude Code
@@ -346,6 +349,18 @@ func cmdResize() error {
 	cols, _ := strconv.Atoi(os.Args[3])
 	rows, _ := strconv.Atoi(os.Args[4])
 	return c.Resize(os.Args[2], cols, rows)
+}
+
+func cmdSetOwner() error {
+	if len(os.Args) < 4 {
+		return fmt.Errorf("usage: claude-term set-owner <id> <owner>")
+	}
+	c, err := connect()
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+	return c.SetOwner(os.Args[2], os.Args[3])
 }
 
 func cmdKill() error {

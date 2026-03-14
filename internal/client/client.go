@@ -280,6 +280,18 @@ func (c *Client) Resize(termID string, cols, rows int) error {
 	return err
 }
 
+// SetOwner changes a terminal's owner.
+func (c *Client) SetOwner(termID string, owner string) error {
+	id := c.nextID()
+	_, err := c.send(&protocol.Message{
+		Type:   protocol.TypeSetOwner,
+		ID:     id,
+		TermID: termID,
+		Owner:  owner,
+	})
+	return err
+}
+
 // Kill terminates a terminal.
 func (c *Client) Kill(termID string) error {
 	id := c.nextID()

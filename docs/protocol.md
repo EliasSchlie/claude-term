@@ -62,11 +62,17 @@ Fire-and-forget.
 ```
 Response: `{"type": "resized", "id": "req-5", "term_id": "t1"}`
 
+### `set_owner`
+```json
+{"type": "set_owner", "id": "req-6", "term_id": "t1", "owner": "new-session-id"}
+```
+Response: `{"type": "owner_set", "id": "req-6", "term_id": "t1"}`
+
 ### `kill`
 ```json
-{"type": "kill", "id": "req-6", "term_id": "t1"}
+{"type": "kill", "id": "req-7", "term_id": "t1"}
 ```
-Response: `{"type": "killed", "id": "req-6", "term_id": "t1"}`
+Response: `{"type": "killed", "id": "req-7", "term_id": "t1"}`
 
 ### `ping`
 ```json

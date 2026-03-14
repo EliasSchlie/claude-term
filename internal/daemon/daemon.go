@@ -231,6 +231,8 @@ func (d *Daemon) handleMessage(conn net.Conn, msg *protocol.Message) {
 		d.handleAttach(conn, msg)
 	case protocol.TypeDetach:
 		d.handleDetach(conn, msg)
+	case protocol.TypeSetOwner:
+		d.handleSetOwner(conn, msg)
 	case protocol.TypeKill:
 		d.handleKill(conn, msg)
 	case protocol.TypeList:
@@ -368,6 +370,15 @@ func (d *Daemon) handleDetach(conn net.Conn, msg *protocol.Message) {
 		}
 	}
 	d.mu.Unlock()
+}
+
+func (d *Daemon) handleSetOwner(conn net.Conn, msg *protocol.Message) {
+	t := d.requireTerminal(conn, msg)
+	if t == nil {
+		return
+	}
+	t.SetOwner(msg.Owner)
+	d.sendMsg(conn, &protocol.Message{Type: protocol.TypeOwnerSet, ID: msg.ID, TermID: msg.TermID})
 }
 
 func (d *Daemon) handleKill(conn net.Conn, msg *protocol.Message) {

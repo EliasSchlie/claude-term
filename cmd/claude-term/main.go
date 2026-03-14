@@ -134,11 +134,16 @@ func ensureDaemon() error {
 }
 
 // resolveOwner returns the owner from --owner flag, or auto-discovers from process tree.
+// Warns if running inside Claude Code without the hook installed.
 func resolveOwner(explicit string) string {
 	if explicit != "" {
 		return explicit
 	}
-	return owner.Discover()
+	discovered := owner.Discover()
+	if discovered == "" && os.Getenv("CLAUDECODE") == "1" {
+		fmt.Fprintln(os.Stderr, "⚠️  claude-term hooks not installed. Run: claude-term install")
+	}
+	return discovered
 }
 
 func cmdSpawn() error {

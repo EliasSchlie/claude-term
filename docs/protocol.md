@@ -62,11 +62,31 @@ Fire-and-forget.
 ```
 Response: `{"type": "resized", "id": "req-5", "term_id": "t1"}`
 
+### `set_owner`
+```json
+{"type": "set_owner", "id": "req-6", "term_id": "t1", "owner": "new-session-id"}
+```
+Response: `{"type": "owner_set", "id": "req-6", "term_id": "t1"}`
+
 ### `kill`
 ```json
-{"type": "kill", "id": "req-6", "term_id": "t1"}
+{"type": "kill", "id": "req-7", "term_id": "t1"}
 ```
-Response: `{"type": "killed", "id": "req-6", "term_id": "t1"}`
+Response: `{"type": "killed", "id": "req-7", "term_id": "t1"}`
+
+### `subscribe`
+```json
+{"type": "subscribe", "id": "req-8"}
+```
+Response: `{"type": "subscribed", "id": "req-8"}`
+
+After subscribing, client receives lifecycle push events for all terminals (see below).
+
+### `unsubscribe`
+Fire-and-forget.
+```json
+{"type": "unsubscribe"}
+```
 
 ### `ping`
 ```json
@@ -76,11 +96,30 @@ Response: `{"type": "pong", "id": "req-7"}`
 
 ## Push Events (Daemon → Client, no request ID)
 
+### Attach events (per-terminal, requires `attach`)
+
 | Type     | Description | Data encoding |
 |----------|-------------|---------------|
 | `data`   | Live output from attached terminal | base64 |
 | `replay` | Buffer snapshot sent on attach | base64 |
 | `exit`   | Process terminated | `exit_code` integer |
+
+### Lifecycle events (global, requires `subscribe`)
+
+| Type | Description | Fields |
+|------|-------------|--------|
+| `term_spawned` | Terminal created | `term_id`, `owner`, `cmd`, `cwd`, `pid` |
+| `term_killed` | Terminal killed via `kill` | `term_id` |
+| `term_exited` | Process exited naturally | `term_id`, `exit_code` |
+| `term_owner_changed` | Owner changed via `set_owner` | `term_id`, `owner` |
+
+Example:
+```json
+{"type": "term_spawned", "term_id": "t1", "owner": "session-abc", "cmd": "/bin/zsh", "cwd": "/home/user", "pid": 12345}
+{"type": "term_killed", "term_id": "t1"}
+{"type": "term_exited", "term_id": "t1", "exit_code": 0}
+{"type": "term_owner_changed", "term_id": "t1", "owner": "new-session"}
+```
 
 ## Errors
 

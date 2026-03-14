@@ -6,15 +6,18 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/EliasSchlie/claude-term/internal/client"
 	"github.com/EliasSchlie/claude-term/internal/daemon"
 	"github.com/EliasSchlie/claude-term/internal/owner"
 	"github.com/EliasSchlie/claude-term/internal/paths"
+	"github.com/EliasSchlie/claude-term/internal/protocol"
 	"golang.org/x/term"
 )
 
@@ -42,8 +45,12 @@ func main() {
 		err = cmdAttach()
 	case "resize":
 		err = cmdResize()
+	case "set-owner":
+		err = cmdSetOwner()
 	case "kill":
 		err = cmdKill()
+	case "subscribe":
+		err = cmdSubscribe()
 	case "ping":
 		err = cmdPing()
 	case "install":
@@ -73,7 +80,9 @@ Commands:
   read <id>          Read terminal buffer
   attach <id>        Attach to terminal (interactive)
   resize <id> <c> <r> Resize terminal
+  set-owner <id> <o> Change terminal owner
   kill <id>          Kill terminal
+  subscribe          Stream lifecycle events (JSON lines)
   ping               Health check
   install            Install hooks and skill into Claude Code
   uninstall          Remove hooks and skill from Claude Code`)
@@ -134,11 +143,16 @@ func ensureDaemon() error {
 }
 
 // resolveOwner returns the owner from --owner flag, or auto-discovers from process tree.
+// Warns if running inside Claude Code without the hook installed.
 func resolveOwner(explicit string) string {
 	if explicit != "" {
 		return explicit
 	}
-	return owner.Discover()
+	discovered := owner.Discover()
+	if discovered == "" && os.Getenv("CLAUDECODE") == "1" {
+		fmt.Fprintln(os.Stderr, "⚠️  claude-term hooks not installed. Run: claude-term install")
+	}
+	return discovered
 }
 
 func cmdSpawn() error {
@@ -304,6 +318,13 @@ func cmdAttach() error {
 		defer term.Restore(int(os.Stdin.Fd()), oldState)
 	}
 
+	// Detect connection loss
+	go func() {
+		<-c.Done()
+		fmt.Fprintf(os.Stderr, "\n[connection to daemon lost]\n")
+		finish()
+	}()
+
 	// Forward stdin to terminal
 	go func() {
 		buf := make([]byte, 1024)
@@ -343,6 +364,18 @@ func cmdResize() error {
 	return c.Resize(os.Args[2], cols, rows)
 }
 
+func cmdSetOwner() error {
+	if len(os.Args) < 4 {
+		return fmt.Errorf("usage: claude-term set-owner <id> <owner>")
+	}
+	c, err := connect()
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+	return c.SetOwner(os.Args[2], os.Args[3])
+}
+
 func cmdKill() error {
 	if len(os.Args) < 3 {
 		return fmt.Errorf("usage: claude-term kill <id>")
@@ -353,6 +386,45 @@ func cmdKill() error {
 	}
 	defer c.Close()
 	return c.Kill(os.Args[2])
+}
+
+func cmdSubscribe() error {
+	c, err := connect()
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+
+	writeEvent := func(msg *protocol.Message) {
+		data, err := protocol.Encode(msg)
+		if err != nil {
+			return
+		}
+		data = append(data, '\n')
+		os.Stdout.Write(data)
+	}
+
+	c.SetPushHandler(client.PushHandler{
+		OnTermSpawned:      writeEvent,
+		OnTermKilled:       writeEvent,
+		OnTermExited:       writeEvent,
+		OnTermOwnerChanged: writeEvent,
+	})
+
+	if err := c.Subscribe(); err != nil {
+		return err
+	}
+
+	// Block until connection closes or signal
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
+	select {
+	case <-sigs:
+		c.Unsubscribe()
+	case <-c.Done():
+		return fmt.Errorf("connection to daemon lost")
+	}
+	return nil
 }
 
 func cmdPing() error {

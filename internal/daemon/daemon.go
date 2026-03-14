@@ -63,6 +63,8 @@ type Daemon struct {
 	clients map[net.Conn]*connState
 	// termID -> set of attached client connections
 	attached map[string]map[net.Conn]struct{}
+	// clients subscribed to lifecycle events
+	subscribers map[net.Conn]struct{}
 
 	socketPath string
 	pidPath    string
@@ -73,12 +75,13 @@ type Daemon struct {
 // New creates a new daemon.
 func New() *Daemon {
 	return &Daemon{
-		registry:   terminal.NewRegistry(),
-		clients:    make(map[net.Conn]*connState),
-		attached:   make(map[string]map[net.Conn]struct{}),
-		socketPath: paths.SocketPath(),
-		pidPath:    paths.PIDPath(),
-		quit:       make(chan struct{}),
+		registry:    terminal.NewRegistry(),
+		clients:     make(map[net.Conn]*connState),
+		attached:    make(map[string]map[net.Conn]struct{}),
+		subscribers: make(map[net.Conn]struct{}),
+		socketPath:  paths.SocketPath(),
+		pidPath:     paths.PIDPath(),
+		quit:        make(chan struct{}),
 	}
 }
 
@@ -176,6 +179,14 @@ func (d *Daemon) Shutdown() {
 	if d.listener != nil {
 		d.listener.Close()
 	}
+
+	// Close all client connections so their readLoops exit
+	d.mu.Lock()
+	for conn := range d.clients {
+		conn.Close()
+	}
+	d.mu.Unlock()
+
 	_ = os.Remove(d.socketPath)
 	_ = os.Remove(d.pidPath)
 }
@@ -200,6 +211,7 @@ func (d *Daemon) handleConn(conn net.Conn) {
 				delete(d.attached, termID)
 			}
 		}
+		delete(d.subscribers, conn)
 		d.resetIdleTimer()
 		d.mu.Unlock()
 		conn.Close()
@@ -231,10 +243,16 @@ func (d *Daemon) handleMessage(conn net.Conn, msg *protocol.Message) {
 		d.handleAttach(conn, msg)
 	case protocol.TypeDetach:
 		d.handleDetach(conn, msg)
+	case protocol.TypeSetOwner:
+		d.handleSetOwner(conn, msg)
 	case protocol.TypeKill:
 		d.handleKill(conn, msg)
 	case protocol.TypeList:
 		d.handleList(conn, msg)
+	case protocol.TypeSubscribe:
+		d.handleSubscribe(conn, msg)
+	case protocol.TypeUnsubscribe:
+		d.handleUnsubscribe(conn)
 	case protocol.TypePing:
 		d.sendMsg(conn, &protocol.Message{Type: protocol.TypePong, ID: msg.ID})
 	default:
@@ -276,6 +294,11 @@ func (d *Daemon) handleSpawn(conn net.Conn, msg *protocol.Message) {
 				TermID:   termID,
 				ExitCode: &exitCode,
 			})
+			d.notifySubscribers(&protocol.Message{
+				Type:     protocol.TypeTermExited,
+				TermID:   termID,
+				ExitCode: &exitCode,
+			})
 		},
 	})
 	if err != nil {
@@ -286,6 +309,14 @@ func (d *Daemon) handleSpawn(conn net.Conn, msg *protocol.Message) {
 	d.registry.Add(t)
 	d.resetIdleTimer()
 	d.sendMsg(conn, &protocol.Message{Type: protocol.TypeSpawned, ID: msg.ID, TermID: id, PID: t.PID})
+	d.notifySubscribers(&protocol.Message{
+		Type:   protocol.TypeTermSpawned,
+		TermID: id,
+		Owner:  msg.Owner,
+		Cmd:    t.Cmd,
+		Cwd:    t.Cwd,
+		PID:    t.PID,
+	})
 }
 
 func (d *Daemon) handleWrite(msg *protocol.Message) {
@@ -370,6 +401,20 @@ func (d *Daemon) handleDetach(conn net.Conn, msg *protocol.Message) {
 	d.mu.Unlock()
 }
 
+func (d *Daemon) handleSetOwner(conn net.Conn, msg *protocol.Message) {
+	t := d.requireTerminal(conn, msg)
+	if t == nil {
+		return
+	}
+	t.SetOwner(msg.Owner)
+	d.sendMsg(conn, &protocol.Message{Type: protocol.TypeOwnerSet, ID: msg.ID, TermID: msg.TermID})
+	d.notifySubscribers(&protocol.Message{
+		Type:   protocol.TypeTermOwnerChanged,
+		TermID: msg.TermID,
+		Owner:  msg.Owner,
+	})
+}
+
 func (d *Daemon) handleKill(conn net.Conn, msg *protocol.Message) {
 	t := d.requireTerminal(conn, msg)
 	if t == nil {
@@ -384,6 +429,10 @@ func (d *Daemon) handleKill(conn net.Conn, msg *protocol.Message) {
 	d.mu.Unlock()
 
 	d.sendMsg(conn, &protocol.Message{Type: protocol.TypeKilled, ID: msg.ID, TermID: msg.TermID})
+	d.notifySubscribers(&protocol.Message{
+		Type:   protocol.TypeTermKilled,
+		TermID: msg.TermID,
+	})
 }
 
 func (d *Daemon) handleList(conn net.Conn, msg *protocol.Message) {
@@ -405,9 +454,41 @@ func (d *Daemon) handleList(conn net.Conn, msg *protocol.Message) {
 	d.sendMsg(conn, &protocol.Message{Type: protocol.TypeListResult, ID: msg.ID, Terminals: infos})
 }
 
-// broadcast sends a pre-encoded message to all clients attached to a terminal.
-// Marshals once, enqueues to each client's write goroutine (non-blocking).
+func (d *Daemon) handleSubscribe(conn net.Conn, msg *protocol.Message) {
+	d.mu.Lock()
+	d.subscribers[conn] = struct{}{}
+	d.mu.Unlock()
+	log.Printf("client subscribed to lifecycle events")
+	d.sendMsg(conn, &protocol.Message{Type: protocol.TypeSubscribed, ID: msg.ID})
+}
+
+func (d *Daemon) handleUnsubscribe(conn net.Conn) {
+	d.mu.Lock()
+	delete(d.subscribers, conn)
+	d.mu.Unlock()
+	log.Printf("client unsubscribed from lifecycle events")
+}
+
+// notifySubscribers sends a lifecycle event to all subscribed clients.
+func (d *Daemon) notifySubscribers(msg *protocol.Message) {
+	d.fanOut(d.subscribers, msg)
+}
+
+// broadcast sends a message to all clients attached to a terminal.
 func (d *Daemon) broadcast(termID string, msg *protocol.Message) {
+	d.fanOut(d.attached[termID], msg)
+}
+
+// fanOut encodes a message once and enqueues it to every connection in targets.
+// Non-blocking: drops the message for clients that can't keep up.
+func (d *Daemon) fanOut(targets map[net.Conn]struct{}, msg *protocol.Message) {
+	d.mu.Lock()
+	n := len(targets)
+	d.mu.Unlock()
+	if n == 0 {
+		return
+	}
+
 	data, err := protocol.Encode(msg)
 	if err != nil {
 		return
@@ -415,12 +496,11 @@ func (d *Daemon) broadcast(termID string, msg *protocol.Message) {
 	data = append(data, '\n')
 
 	d.mu.Lock()
-	for conn := range d.attached[termID] {
+	for conn := range targets {
 		if cs, ok := d.clients[conn]; ok {
 			select {
 			case cs.writeCh <- data:
 			default:
-				// Client can't keep up — drop message
 			}
 		}
 	}

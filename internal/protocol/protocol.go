@@ -7,15 +7,18 @@ import (
 
 // Request types
 const (
-	TypeSpawn  = "spawn"
-	TypeWrite  = "write"
-	TypeResize = "resize"
-	TypeRead   = "read"
-	TypeAttach = "attach"
-	TypeDetach = "detach"
-	TypeKill   = "kill"
-	TypeList   = "list"
-	TypePing   = "ping"
+	TypeSpawn       = "spawn"
+	TypeWrite       = "write"
+	TypeResize      = "resize"
+	TypeRead        = "read"
+	TypeAttach      = "attach"
+	TypeDetach      = "detach"
+	TypeSetOwner    = "set_owner"
+	TypeKill        = "kill"
+	TypeList        = "list"
+	TypePing        = "ping"
+	TypeSubscribe   = "subscribe"
+	TypeUnsubscribe = "unsubscribe"
 )
 
 // Response types
@@ -24,10 +27,12 @@ const (
 	TypeResized    = "resized"
 	TypeReadResult = "read_result"
 	TypeAttached   = "attached"
+	TypeOwnerSet   = "owner_set"
 	TypeKilled     = "killed"
 	TypeListResult = "list_result"
 	TypePong       = "pong"
 	TypeError      = "error"
+	TypeSubscribed = "subscribed"
 )
 
 // Push event types
@@ -35,6 +40,12 @@ const (
 	TypeData   = "data"
 	TypeReplay = "replay"
 	TypeExit   = "exit"
+
+	// Lifecycle push events (for subscribers)
+	TypeTermSpawned      = "term_spawned"
+	TypeTermKilled       = "term_killed"
+	TypeTermExited       = "term_exited"
+	TypeTermOwnerChanged = "term_owner_changed"
 )
 
 // Message is the wire format for all protocol messages.

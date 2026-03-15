@@ -1,0 +1,10 @@
+{
+  "name": "claude-term",
+  "description": "Persistent terminal management — spawn, read, write, and kill terminals that survive session disconnects",
+  "version": "0.1.0",
+  "author": {
+    "name": "Elias Schlie"
+  },
+  "repository": "https://github.com/EliasSchlie/claude-term",
+  "license": "MIT"
+}

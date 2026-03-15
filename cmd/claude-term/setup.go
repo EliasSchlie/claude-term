@@ -67,8 +67,9 @@ func cmdInstall() error {
 		return fmt.Errorf("create owners dir: %w", err)
 	}
 
-	fmt.Println("\n✅ claude-term installed!")
+	fmt.Println("\n✅ claude-term installed (standalone mode)!")
 	fmt.Println("   Start a new Claude session to activate.")
+	fmt.Println("   Note: If using the claude-term plugin, this step is unnecessary.")
 	return nil
 }
 

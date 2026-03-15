@@ -6,6 +6,9 @@
 
 set -euo pipefail
 
+# Allow disabling via env var: CLAUDE_TERM=0 claude
+[ "${CLAUDE_TERM:-}" != "0" ] || exit 0
+
 CLAUDE_TERM_DIR="${CLAUDE_TERM_DIR:-$HOME/.claude-term}"
 OWNERS_DIR="$CLAUDE_TERM_DIR/owners"
 mkdir -p "$OWNERS_DIR"

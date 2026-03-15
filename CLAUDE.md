@@ -10,8 +10,8 @@ Persistent terminal management. Daemon + client library + CLI, written in Go.
 
 - **Run tests:** `go test ./...`
 - **Build:** `go build -o claude-term ./cmd/claude-term`
-- **Install:** `./claude-term install` (hooks + skill into Claude Code)
-- **Uninstall:** `./claude-term uninstall` (clean removal)
+- **Plugin test:** `claude --plugin-dir .` (loads skill + hook for one session)
+- **Standalone install:** `./claude-term install` (fallback — writes directly to `~/.claude/`)
 - **Socket:** `~/.claude-term/daemon.sock` (override: `CLAUDE_TERM_SOCKET`)
 
 ## Docs
@@ -30,9 +30,10 @@ internal/
   client/            Go client library
   owner/             Owner auto-discovery (PPID walk)
   paths/             Socket/PID file path resolution
-hooks/               SessionStart hook source
-skill/               Skill source
-cmd/claude-term/embedded/  Embedded copies (go:embed) for install command
+.claude-plugin/      Plugin manifest (plugin.json)
+skills/claude-term/  Plugin skill (SKILL.md)
+hooks/               SessionStart hook + hooks.json (plugin hook config)
+cmd/claude-term/embedded/  Embedded copies (go:embed) for standalone install
 ```
 
 ## Conventions

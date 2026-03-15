@@ -150,7 +150,7 @@ func resolveOwner(explicit string) string {
 	}
 	discovered := owner.Discover()
 	if discovered == "" && os.Getenv("CLAUDECODE") == "1" {
-		fmt.Fprintln(os.Stderr, "⚠️  claude-term hooks not installed. Run: claude-term install")
+		fmt.Fprintln(os.Stderr, "⚠️  claude-term hooks not installed. Install via plugin or run: claude-term install")
 	}
 	return discovered
 }

@@ -23,9 +23,15 @@ print()
 echo "  Version: $old_version → $new_version"
 
 # --- Copy plugin files to cache ---
-CACHE_DIR="$HOME/.claude/plugins/cache/local-tools/claude-term/$new_version"
-OLD_CACHE="$HOME/.claude/plugins/cache/local-tools/claude-term/$old_version"
-[ -d "$OLD_CACHE" ] && rm -rf "$OLD_CACHE"
+CACHE_BASE="$HOME/.claude/plugins/cache/local-tools/claude-term"
+CACHE_DIR="$CACHE_BASE/$new_version"
+
+# Remove all old cached versions
+if [ -d "$CACHE_BASE" ]; then
+  for old in "$CACHE_BASE"/*/; do
+    [ -d "$old" ] && rm -rf "$old"
+  done
+fi
 mkdir -p "$CACHE_DIR"
 
 # Only copy plugin-relevant files (not Go source, binaries, .wt/, etc.)

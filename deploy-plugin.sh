@@ -70,4 +70,9 @@ else:
 " || true
 fi
 
+# --- Commit version bump ---
+cd "$SCRIPT_DIR"
+git add .claude-plugin/plugin.json
+git commit -m "Bump plugin to v$new_version [skip ci]" --quiet 2>/dev/null || true
+
 echo "  ✅ Deployed. Run /reload-plugins in active sessions."

@@ -1,7 +1,7 @@
 {
   "name": "claude-term",
   "description": "Persistent terminal management \u2014 spawn, read, write, and kill terminals that survive session disconnects",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "author": {
     "name": "Elias Schlie"
   },

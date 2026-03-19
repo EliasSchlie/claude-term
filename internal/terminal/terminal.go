@@ -66,9 +66,9 @@ func Spawn(id string, opts SpawnOpts) (*Terminal, error) {
 	cmd := exec.Command(opts.Cmd, opts.Args...)
 	cmd.Dir = opts.Cwd
 
-	// Build environment — use login shell PATH so spawned terminals get the
-	// same PATH as a normal terminal (Homebrew, pyenv, nvm, etc.)
-	cmd.Env = buildEnvWithLoginPATH(opts.Env)
+	// Build environment from login shell — gives spawned terminals a clean
+	// env identical to opening a fresh terminal, without inheriting daemon state.
+	cmd.Env = buildSpawnEnv(opts.Env)
 
 	size := &pty.Winsize{
 		Cols: uint16(opts.Cols),

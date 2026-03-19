@@ -51,11 +51,28 @@ func resolveLoginEnv() ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	// Use env -0 for null-delimited output — handles values with newlines
-	cmd := exec.CommandContext(ctx, shell, "-lc", "env -0")
+	// Run login shell with a clean env (env -i) so no daemon vars leak through.
+	// Only pass the minimal vars the shell needs to bootstrap its profile,
+	// plus launchd-provided vars that shell profiles don't set (TMPDIR, __CF_USER_TEXT_ENCODING).
+	bootstrapArgs := []string{"-i",
+		"HOME=" + os.Getenv("HOME"),
+		"USER=" + os.Getenv("USER"),
+		"SHELL=" + shell,
+		"TERM=xterm-256color",
+		"LOGNAME=" + os.Getenv("USER"),
+	}
+	// TMPDIR and __CF_USER_TEXT_ENCODING are set by launchd, not shell profiles.
+	// Without TMPDIR, programs fall back to /tmp instead of the per-user temp dir.
+	for _, v := range []string{"TMPDIR", "__CF_USER_TEXT_ENCODING"} {
+		if val := os.Getenv(v); val != "" {
+			bootstrapArgs = append(bootstrapArgs, v+"="+val)
+		}
+	}
+	bootstrapArgs = append(bootstrapArgs, shell, "-lc", "env -0")
+	cmd := exec.CommandContext(ctx, "/usr/bin/env", bootstrapArgs...)
 	out, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("login shell (%s -lc 'env -0'): %w", shell, err)
+		return nil, fmt.Errorf("login shell (env -i ... %s -lc 'env -0'): %w", shell, err)
 	}
 
 	env := parseNullDelimitedEnv(out)

@@ -106,6 +106,28 @@ func TestBuildSpawnEnv_Extras(t *testing.T) {
 	}
 }
 
+// Prevents: daemon env vars (CLAUDECODE, debug flags, etc.) leaking into spawned terminals
+func TestResolveLoginEnv_NoDaemonVarsLeak(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("login shell env not applicable on Windows")
+	}
+
+	env, err := resolveLoginEnv()
+	if err != nil {
+		t.Fatalf("resolveLoginEnv failed: %v", err)
+	}
+
+	// These vars exist in the daemon's env but should NOT appear in login shell env
+	daemonVars := []string{"CLAUDECODE", "CLAUDE_CODE_SESSION_ID"}
+	for _, dv := range daemonVars {
+		for _, e := range env {
+			if strings.HasPrefix(e, dv+"=") {
+				t.Errorf("daemon var %s leaked into login shell env", dv)
+			}
+		}
+	}
+}
+
 // Prevents: buildSpawnEnv mutating the cached login env slice
 func TestBuildSpawnEnv_NoCacheMutation(t *testing.T) {
 	env1 := buildSpawnEnv(map[string]string{"A": "1"})

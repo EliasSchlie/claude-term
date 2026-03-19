@@ -352,10 +352,46 @@ func cmdAttach() error {
 	}
 
 	// Put terminal in raw mode for interactive use
-	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
+	fd := int(os.Stdin.Fd())
+	oldState, err := term.MakeRaw(fd)
 	if err == nil {
-		defer term.Restore(int(os.Stdin.Fd()), oldState)
+		defer term.Restore(fd, oldState)
 	}
+
+	// Sync remote terminal size to match local terminal on attach
+	syncSize := func() {
+		w, h, err := term.GetSize(fd)
+		if err == nil {
+			c.Resize(termID, w, h)
+		}
+	}
+	syncSize()
+
+	// Forward SIGWINCH (terminal resize) to remote terminal with debounce.
+	// Debounce prevents resize loops in nested PTY environments (e.g., Open Cockpit).
+	winchCh := make(chan os.Signal, 1)
+	signal.Notify(winchCh, syscall.SIGWINCH)
+	go func() {
+		defer signal.Stop(winchCh)
+		var lastW, lastH int
+		for {
+			select {
+			case <-winchCh:
+				w, h, err := term.GetSize(fd)
+				if err != nil {
+					continue
+				}
+				// Only forward if size actually changed (breaks resize loops)
+				if w == lastW && h == lastH {
+					continue
+				}
+				lastW, lastH = w, h
+				c.Resize(termID, w, h)
+			case <-done:
+				return
+			}
+		}
+	}()
 
 	// Detect connection loss
 	go func() {

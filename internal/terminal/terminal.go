@@ -66,11 +66,9 @@ func Spawn(id string, opts SpawnOpts) (*Terminal, error) {
 	cmd := exec.Command(opts.Cmd, opts.Args...)
 	cmd.Dir = opts.Cwd
 
-	// Build environment
-	cmd.Env = os.Environ()
-	for k, v := range opts.Env {
-		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
-	}
+	// Build environment — use login shell PATH so spawned terminals get the
+	// same PATH as a normal terminal (Homebrew, pyenv, nvm, etc.)
+	cmd.Env = buildEnvWithLoginPATH(opts.Env)
 
 	size := &pty.Winsize{
 		Cols: uint16(opts.Cols),

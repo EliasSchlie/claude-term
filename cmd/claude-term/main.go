@@ -258,8 +258,47 @@ func cmdWrite() error {
 	defer c.Close()
 
 	termID := os.Args[2]
-	input := strings.Join(os.Args[3:], " ")
+	input := unescapeInput(strings.Join(os.Args[3:], " "))
 	return c.Write(termID, input)
+}
+
+// unescapeInput interprets C-style escape sequences in CLI input so that
+// `claude-term write t1 "npm test\n"` sends a real newline.
+func unescapeInput(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		if s[i] != '\\' || i+1 >= len(s) {
+			b.WriteByte(s[i])
+			continue
+		}
+		switch s[i+1] {
+		case 'n':
+			b.WriteByte('\n')
+		case 'r':
+			b.WriteByte('\r')
+		case 't':
+			b.WriteByte('\t')
+		case '\\':
+			b.WriteByte('\\')
+		case 'x':
+			// Hex escape: \x1b etc.
+			if i+3 < len(s) {
+				if val, err := strconv.ParseUint(s[i+2:i+4], 16, 8); err == nil {
+					b.WriteByte(byte(val))
+					i += 3
+					continue
+				}
+			}
+			b.WriteByte('\\')
+			continue // don't skip next char
+		default:
+			b.WriteByte('\\')
+			continue // don't skip next char — not a recognized escape
+		}
+		i++ // skip the char after backslash
+	}
+	return b.String()
 }
 
 func cmdRead() error {

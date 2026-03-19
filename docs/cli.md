@@ -6,7 +6,7 @@ claude-term stop                         Stop daemon
 claude-term spawn [cmd] [args...]        Spawn terminal, print term_id
 claude-term list                         List your terminals (JSON)
 claude-term list --all                   List all terminals
-claude-term write <id> <input>           Write input to terminal
+claude-term write <id> <input>           Write input to terminal (supports \n \r \t \\ \xNN escapes)
 claude-term read <id>                    Read buffered output
 claude-term attach <id>                  Interactive bidirectional attach (Ctrl+] to detach)
 claude-term resize <id> <cols> <rows>    Resize terminal

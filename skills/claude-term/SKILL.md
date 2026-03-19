@@ -64,6 +64,22 @@ Terminal ownership is automatic. When you spawn a terminal, it's automatically a
 
 Terminals persist until explicitly killed or inactive for 24 hours (no reads, no writes, no output). They survive session disconnects and restarts.
 
-## Interactive Attach
+## Collaborating with the User
 
-For interactive use (humans, not agents), `claude-term attach <id>` provides a live bidirectional connection. Press `Ctrl+]` to detach without killing the terminal.
+When you're doing work in a persistent terminal and want the user to see or interact with it, tell them to attach:
+
+```
+claude-term attach t1
+```
+
+This gives them a live, bidirectional view of the terminal — they see exactly what you see, and can type into it. `Ctrl+]` detaches without killing the terminal.
+
+**Common collaboration patterns:**
+- You start a dev server → user attaches to see logs and interact
+- You run a debugging session → user attaches to inspect state
+- You set up a REPL → user attaches to explore interactively
+
+**Notes:**
+- Multiple clients can attach simultaneously (read-only broadcast, last writer wins)
+- Attach works best from a real terminal (Terminal.app, iTerm). In nested terminals (e.g., Open Cockpit tabs), it works but the output may render differently.
+- The remote terminal auto-resizes to match the attaching terminal
